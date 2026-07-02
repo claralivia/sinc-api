@@ -35,10 +35,6 @@ export class TransactionService {
   }
 
   async createTransaction(data: Partial<ITransaction> & { partnerId?: mongoose.Types.ObjectId, customSplitPercentage?: number }) {
-    if (data.paymentMethod === 'CREDIT_CARD' && !data.cardId) {
-      throw new Error('Um cartão de crédito deve ser informado para este método de pagamento.');
-    }
-
     if (data.cardId) {
       const cardExists = await Card.findById(data.cardId);
       if (!cardExists) {
@@ -116,7 +112,7 @@ export class TransactionService {
 
     const [transactions, total] = await Promise.all([
       Transaction.find(query)
-        .sort({ date: -1 }) // Mais recentes primeiro
+        .sort({ date: -1 })
         .skip(skip)
         .limit(limit)
         .populate('categoryId', 'name icon color')

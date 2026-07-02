@@ -6,16 +6,17 @@ const dashboardService = new DashboardService();
 export class DashboardController {
   async getSummary(req: Request, res: Response) {
     try {
-      const { startDate, endDate, userId } = req.query;
+      const { startDate, endDate } = req.query;
+      const user = (req as any).user;
 
-      if (!startDate || !endDate || !userId) {
-        return res.status(400).json({ error: 'Parâmetros startDate, endDate e userId são obrigatórios.' });
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: 'Parâmetros startDate e endDate são obrigatórios.' });
       }
 
       const summary = await dashboardService.getMonthlySummary(
         startDate as string, 
         endDate as string, 
-        userId as string
+        user.id
       );
 
       return res.status(200).json(summary);

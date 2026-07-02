@@ -8,10 +8,15 @@ const transactionService = new TransactionService();
 export class TransactionController {
   async create(req: Request, res: Response) {
     try {
-      const transactionData = req.body;
+      const user = (req as any).user;
+      const transactionData = { ...req.body, paidBy: user.id };
       
       if (!Object.keys(transactionData)?.length) {
         return res.status(400).json({ error: 'Nenhum dado fornecido para a transação.' });
+      }
+
+      if (!transactionData.description || !transactionData.amount || !transactionData.type || !transactionData.categoryId) {
+        return res.status(400).json({ error: 'Descrição, valor, tipo e categoria são obrigatórios.' });
       }
 
       const transaction = await transactionService.createTransaction(transactionData);
