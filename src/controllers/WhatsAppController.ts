@@ -76,6 +76,7 @@ export class WhatsAppController {
 
       return res.status(200).json({ success: true });
     } catch (error) {
+      console.error('Erro ao processar mensagem do WhatsApp:', error);
       await whatsAppService.sendText(phone, 'Não consegui salvar essa transação. Confira a mensagem e tente novamente.');
       return res.status(200).json({ success: false });
     }

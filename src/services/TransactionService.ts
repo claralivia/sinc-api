@@ -117,6 +117,7 @@ export class TransactionService {
         .limit(limit)
         .populate('categoryId', 'name icon color')
         .populate('paidBy', 'name avatarUrl')
+        .populate('owedBy', 'name avatarUrl')
         .populate('cardId', 'name color'),
       Transaction.countDocuments(query)
     ]);
@@ -136,5 +137,62 @@ export class TransactionService {
     const transaction = await Transaction.findByIdAndDelete(id);
     if (!transaction) throw new Error('Transação não encontrada.');
     return transaction;
+  }
+
+  async getInstallmentSummary() {
+    const now = new Date();
+
+    const groups = await Transaction.aggregate([
+      {
+        $match: {
+          installmentGroupId: { $ne: null },
+          deletedAt: null,
+        },
+      },
+      {
+        $sort: { installmentNumber: 1 },
+      },
+      {
+        $group: {
+          _id: '$installmentGroupId',
+          description: { $first: '$description' },
+          categoryId: { $first: '$categoryId' },
+          splitType: { $first: '$splitType' },
+          totalAmount: { $sum: '$amount' },
+          totalInstallments: { $first: '$totalInstallments' },
+          paidCount: { $sum: { $cond: [{ $lte: ['$date', now] }, 1, 0] } },
+          nextDueDate: {
+            $min: { $cond: [{ $gt: ['$date', now] }, '$date', null] },
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'categoryId',
+          foreignField: '_id',
+          as: 'category',
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          installmentGroupId: '$_id',
+          description: 1,
+          splitType: 1,
+          totalAmount: 1,
+          totalInstallments: 1,
+          paidCount: 1,
+          pendingCount: { $subtract: ['$totalInstallments', '$paidCount'] },
+          nextDueDate: 1,
+          categoryName: { $arrayElemAt: ['$category.name', 0] },
+          categoryIcon: { $arrayElemAt: ['$category.icon', 0] },
+          categoryColor: { $arrayElemAt: ['$category.color', 0] },
+        },
+      },
+      { $sort: { nextDueDate: 1 } },
+    ]);
+
+    return groups;
   }
 }

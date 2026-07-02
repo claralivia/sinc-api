@@ -15,6 +15,7 @@ export const processNaturalLanguage = async (req: Request, res: Response) => {
     
     return res.json(parsedTransaction);
   } catch (error) {
+    console.error('Erro ao processar linguagem natural:', error);
     return res.status(500).json({ error: 'Falha ao processar linguagem natural' });
   }
 };

@@ -27,7 +27,7 @@ export class AIService {
     }));
 
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash',
       systemInstruction: [
         'Você é um parser financeiro para o aplicativo SINC.',
         'Responda somente com JSON puro válido, sem markdown e sem texto extra.',

@@ -6,6 +6,7 @@ const userRoutes = Router();
 const userController = new UserController();
 
 userRoutes.get('/me', authMiddleware, userController.me);
+userRoutes.get('/users/partners', authMiddleware, userController.partners);
 userRoutes.get('/users', authMiddleware, adminMiddleware, userController.list);
 userRoutes.put('/users/:id', authMiddleware, adminMiddleware, userController.update);
 

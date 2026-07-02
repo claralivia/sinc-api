@@ -17,6 +17,16 @@ export class UserController {
     }
   }
 
+  async partners(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const partners = await userService.listPartners(user.id);
+      return res.status(200).json(partners);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'Erro ao listar parceiros.' });
+    }
+  }
+
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params as { id: string };

@@ -5,6 +5,10 @@ export class UserService {
     return await User.find().sort({ name: 1 });
   }
 
+  async listPartners(excludeUserId: string) {
+    return await User.find({ _id: { $ne: excludeUserId } }).select('name avatarUrl').sort({ name: 1 });
+  }
+
   async updateUser(id: string, data: { name?: string; role?: string; phone?: string; avatarUrl?: string }) {
     const user = await User.findByIdAndUpdate(id, data, { new: true, runValidators: true });
 

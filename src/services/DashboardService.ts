@@ -53,6 +53,22 @@ export class DashboardService {
           _id: '$owedBy',
           totalOwed: { $sum: '$owedAmount' }
         }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'userDetails'
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          userId: '$_id',
+          userName: { $arrayElemAt: ['$userDetails.name', 0] },
+          amount: '$totalOwed'
+        }
       }
     ]);
 
@@ -87,6 +103,7 @@ export class DashboardService {
           _id: 0,
           categoryName: { $arrayElemAt: ['$categoryDetails.name', 0] },
           categoryColor: { $arrayElemAt: ['$categoryDetails.color', 0] },
+          categoryIcon: { $arrayElemAt: ['$categoryDetails.icon', 0] },
           total: 1
         }
       }
@@ -96,7 +113,7 @@ export class DashboardService {
     return {
       period: { start, end },
       totals: currentTotals,
-      sharedDebt: sharedDebt.map(debt => ({ userId: debt._id, amount: debt.totalOwed })),
+      sharedDebt,
       expensesByCategory // Nova chave para o seu gráfico de rosca
     };
   }

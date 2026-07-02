@@ -52,12 +52,21 @@ export class TransactionController {
   async delete(req: Request, res: Response) {
     try {
       const { id } = req.params as { id: string };
-      
+
       await transactionService.deleteTransaction(id);
-      
+
       return res.status(204).send();
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao deletar transação.' });
+    }
+  }
+
+  async installmentSummary(req: Request, res: Response) {
+    try {
+      const summary = await transactionService.getInstallmentSummary();
+      return res.status(200).json(summary);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'Erro ao carregar resumo de parcelamento.' });
     }
   }
 }

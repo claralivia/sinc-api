@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface ICard extends Document {
   name: string;
   brand: string;
+  logoUrl?: string;
   color: string;
   limit: number;
   closingDay: number;
@@ -14,6 +15,7 @@ const CardSchema = new Schema(
   {
     name: { type: String, required: true },
     brand: { type: String, required: true },
+    logoUrl: { type: String },
     color: { type: String, required: true },
     limit: { type: Number, required: true },
     closingDay: { type: Number, required: true },

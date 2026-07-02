@@ -21,13 +21,15 @@
     "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.1.0",
-    "mongoose": "^9.7.3"
+    "mongoose": "^9.7.3",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.0.1",
+    "@types/ws": "^8.18.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^6.0.3"
   }
