@@ -8,6 +8,7 @@ export interface ICard extends Document {
   limit: number;
   closingDay: number;
   dueDay: number;
+  householdId: mongoose.Types.ObjectId;
   deletedAt?: Date;
 }
 
@@ -20,6 +21,7 @@ const CardSchema = new Schema(
     limit: { type: Number, required: true },
     closingDay: { type: Number, required: true },
     dueDay: { type: Number, required: true },
+    householdId: { type: Schema.Types.ObjectId, ref: 'Household', required: true },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true }

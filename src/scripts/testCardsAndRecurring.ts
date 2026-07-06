@@ -3,6 +3,7 @@ import dns from 'dns';
 import mongoose from 'mongoose';
 import { CardService } from '../services/CardService';
 import { RecurringExpenseService } from '../services/RecurringExpenseService';
+import { getOrCreateHouseholdId } from '../services/UserService';
 import Category from '../models/Category';
 import User from '../models/User';
 
@@ -13,6 +14,9 @@ async function run() {
   const cardService = new CardService();
   const recurringExpenseService = new RecurringExpenseService();
 
+  const user = await User.findOne();
+  const householdId = await getOrCreateHouseholdId(String(user!._id));
+
   const card = await cardService.createCard({
     name: 'Teste Nubank',
     brand: 'Mastercard',
@@ -21,11 +25,11 @@ async function run() {
     limit: 500000,
     closingDay: 10,
     dueDay: 17,
+    householdId,
   });
   console.log('Cartão criado:', card.name, card.logoUrl);
 
   const category = await Category.findOne({ type: 'EXPENSE' });
-  const user = await User.findOne();
 
   const recurring = await recurringExpenseService.createRecurringExpense({
     description: 'Teste Netflix',
@@ -35,23 +39,24 @@ async function run() {
     cardId: String(card._id),
     splitType: 'MINE',
     dueDay: 5,
+    householdId,
   });
   console.log('Gasto fixo criado:', recurring.description);
 
-  const launched: any = await recurringExpenseService.launch(String(recurring._id), String(user!._id), new Date());
+  const launched: any = await recurringExpenseService.launch(String(recurring._id), String(user!._id), new Date(), householdId);
   console.log('Lançado:', launched.description, launched.amount, launched.recurringExpenseId);
 
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
-  const withStatus = await recurringExpenseService.listWithStatus(start, end);
+  const withStatus = await recurringExpenseService.listWithStatus(start, end, householdId);
   console.log('Status:', withStatus.map((r: any) => ({ description: r.description, paid: r.paid })));
 
   // cleanup
   const Transaction = mongoose.model('Transaction');
   await Transaction.deleteOne({ _id: launched._id });
-  await recurringExpenseService.deleteRecurringExpense(String(recurring._id));
-  await cardService.deleteCard(String(card._id));
+  await recurringExpenseService.deleteRecurringExpense(String(recurring._id), householdId);
+  await cardService.deleteCard(String(card._id), householdId);
   await mongoose.disconnect();
 }
 

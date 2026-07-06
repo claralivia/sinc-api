@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CategoryService } from '../services/CategoryService';
+import { getOrCreateHouseholdId, resolveHouseholdId } from '../services/UserService';
 
 const categoryService = new CategoryService();
 const categoryTypes = ['INCOME', 'EXPENSE'];
@@ -7,7 +8,14 @@ const categoryTypes = ['INCOME', 'EXPENSE'];
 export class CategoryController {
   async list(req: Request, res: Response) {
     try {
-      const categories = await categoryService.listCategories();
+      const user = (req as any).user;
+      const householdId = await resolveHouseholdId(user.id);
+
+      if (!householdId) {
+        return res.status(200).json([]);
+      }
+
+      const categories = await categoryService.listCategories(householdId);
       return res.status(200).json(categories);
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao listar categorias.' });
@@ -16,6 +24,7 @@ export class CategoryController {
 
   async create(req: Request, res: Response) {
     try {
+      const user = (req as any).user;
       const { name, type, icon, color } = req.body;
 
       if (!name || !type || !icon || !color) {
@@ -26,7 +35,8 @@ export class CategoryController {
         return res.status(400).json({ error: 'Tipo de categoria inválido.' });
       }
 
-      const category = await categoryService.createCategory({ name, type: type as 'INCOME' | 'EXPENSE', icon, color });
+      const householdId = await getOrCreateHouseholdId(user.id);
+      const category = await categoryService.createCategory({ name, type: type as 'INCOME' | 'EXPENSE', icon, color, householdId });
       return res.status(201).json(category);
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao criar categoria.' });
@@ -35,6 +45,7 @@ export class CategoryController {
 
   async update(req: Request, res: Response) {
     try {
+      const user = (req as any).user;
       const { id } = req.params as { id: string };
       const { name, type, icon, color } = req.body;
 
@@ -46,7 +57,8 @@ export class CategoryController {
         return res.status(400).json({ error: 'Tipo de categoria inválido.' });
       }
 
-      const category = await categoryService.updateCategory(id, { name, type: type as 'INCOME' | 'EXPENSE' | undefined, icon, color });
+      const householdId = await getOrCreateHouseholdId(user.id);
+      const category = await categoryService.updateCategory(id, householdId, { name, type: type as 'INCOME' | 'EXPENSE' | undefined, icon, color });
       return res.status(200).json(category);
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao atualizar categoria.' });
@@ -55,13 +67,15 @@ export class CategoryController {
 
   async delete(req: Request, res: Response) {
     try {
+      const user = (req as any).user;
       const { id } = req.params as { id: string };
 
       if (!id) {
         return res.status(400).json({ error: 'Categoria inválida.' });
       }
 
-      await categoryService.deleteCategory(id);
+      const householdId = await getOrCreateHouseholdId(user.id);
+      await categoryService.deleteCategory(id, householdId);
       return res.status(204).send();
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao excluir categoria.' });

@@ -45,6 +45,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
       email: user.email,
       name: user.name,
       role: user.role,
+      managedUserId: user.managedUserId ? user.managedUserId.toString() : null,
     };
 
     return next();

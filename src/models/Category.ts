@@ -5,6 +5,7 @@ export interface ICategory extends Document {
   type: 'INCOME' | 'EXPENSE';
   icon: string;
   color: string;
+  householdId: mongoose.Types.ObjectId;
   deletedAt?: Date;
 }
 
@@ -14,6 +15,7 @@ const CategorySchema = new Schema(
     type: { type: String, enum: ['INCOME', 'EXPENSE'], required: true },
     icon: { type: String, required: true },
     color: { type: String, required: true },
+    householdId: { type: Schema.Types.ObjectId, ref: 'Household', required: true },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true }

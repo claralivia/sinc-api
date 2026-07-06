@@ -1,16 +1,16 @@
 import Goal from '../models/Goal';
 
 export class GoalService {
-  async listGoals() {
-    return await Goal.find({ deletedAt: null }).sort({ createdAt: 1 });
+  async listGoals(householdId: string) {
+    return await Goal.find({ deletedAt: null, householdId }).sort({ createdAt: 1 });
   }
 
-  async createGoal(data: { name: string; icon: string; color: string; targetAmount: number }) {
+  async createGoal(data: { name: string; icon: string; color: string; targetAmount: number; householdId: string }) {
     return await Goal.create(data);
   }
 
-  async updateGoal(id: string, data: { name?: string; icon?: string; color?: string; targetAmount?: number }) {
-    const goal = await Goal.findOneAndUpdate({ _id: id, deletedAt: null }, data, {
+  async updateGoal(id: string, householdId: string, data: { name?: string; icon?: string; color?: string; targetAmount?: number }) {
+    const goal = await Goal.findOneAndUpdate({ _id: id, householdId, deletedAt: null }, data, {
       new: true,
       runValidators: true,
     });
@@ -22,8 +22,8 @@ export class GoalService {
     return goal;
   }
 
-  async deleteGoal(id: string) {
-    const goal = await Goal.findOneAndUpdate({ _id: id, deletedAt: null }, { deletedAt: new Date() }, { new: true });
+  async deleteGoal(id: string, householdId: string) {
+    const goal = await Goal.findOneAndUpdate({ _id: id, householdId, deletedAt: null }, { deletedAt: new Date() }, { new: true });
 
     if (!goal) {
       throw new Error('Meta não encontrada.');
@@ -32,8 +32,8 @@ export class GoalService {
     return goal;
   }
 
-  async contribute(id: string, amount: number) {
-    const goal = await Goal.findOne({ _id: id, deletedAt: null });
+  async contribute(id: string, householdId: string, amount: number) {
+    const goal = await Goal.findOne({ _id: id, householdId, deletedAt: null });
 
     if (!goal) {
       throw new Error('Meta não encontrada.');

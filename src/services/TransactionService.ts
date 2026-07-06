@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Transaction, { ITransaction } from '../models/Transaction';
 import Card from '../models/Card';
+import { getOrCreateHouseholdId } from './UserService';
 
 export class TransactionService {
   
@@ -43,14 +44,16 @@ export class TransactionService {
     }
 
     const { owedBy, owedAmount } = this.calculateDebt(
-      data.amount!, 
-      data.paidBy!, 
-      data.splitType!, 
-      data.partnerId, 
+      data.amount!,
+      data.paidBy!,
+      data.splitType!,
+      data.partnerId,
       data.customSplitPercentage
     );
 
-    const baseData = { ...data, owedBy, owedAmount };
+    const householdId = await getOrCreateHouseholdId(data.paidBy!.toString());
+
+    const baseData = { ...data, owedBy, owedAmount, householdId };
 
     const isInstallment = data.paymentMethod === 'CREDIT_CARD' && data.totalInstallments && data.totalInstallments > 1;
 
@@ -95,10 +98,10 @@ export class TransactionService {
     return await Transaction.create(baseData);
   }
 
-  async listTransactions(filters: any, page: number = 1, limit: number = 20) {
+  async listTransactions(filters: any, page: number = 1, limit: number = 20, householdId?: string) {
     const skip = (page - 1) * limit;
-    
-    const query: any = { deletedAt: null };
+
+    const query: any = { deletedAt: null, householdId };
 
     if (filters.startDate && filters.endDate) {
       query.date = { 
@@ -133,13 +136,13 @@ export class TransactionService {
     };
   }
 
-  async deleteTransaction(id: string) {
-    const transaction = await Transaction.findByIdAndDelete(id);
+  async deleteTransaction(id: string, householdId: string) {
+    const transaction = await Transaction.findOneAndDelete({ _id: id, householdId });
     if (!transaction) throw new Error('Transação não encontrada.');
     return transaction;
   }
 
-  async getInstallmentSummary() {
+  async getInstallmentSummary(householdId: string) {
     const now = new Date();
 
     const groups = await Transaction.aggregate([
@@ -147,6 +150,7 @@ export class TransactionService {
         $match: {
           installmentGroupId: { $ne: null },
           deletedAt: null,
+          householdId: new mongoose.Types.ObjectId(householdId),
         },
       },
       {

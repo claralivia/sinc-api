@@ -6,6 +6,7 @@ export interface IGoal extends Document {
   color: string;
   targetAmount: number;
   currentAmount: number;
+  householdId: mongoose.Types.ObjectId;
   deletedAt?: Date;
 }
 
@@ -16,6 +17,7 @@ const GoalSchema = new Schema(
     color: { type: String, required: true },
     targetAmount: { type: Number, required: true },
     currentAmount: { type: Number, default: 0 },
+    householdId: { type: Schema.Types.ObjectId, ref: 'Household', required: true },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true }

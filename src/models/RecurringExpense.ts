@@ -11,6 +11,7 @@ export interface IRecurringExpense extends Document {
   customSplitPercentage?: number;
   dueDay: number;
   active: boolean;
+  householdId: mongoose.Types.ObjectId;
   deletedAt?: Date;
 }
 
@@ -26,6 +27,7 @@ const RecurringExpenseSchema = new Schema(
     customSplitPercentage: { type: Number },
     dueDay: { type: Number, required: true },
     active: { type: Boolean, default: true },
+    householdId: { type: Schema.Types.ObjectId, ref: 'Household', required: true },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true }

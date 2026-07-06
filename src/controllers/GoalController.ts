@@ -1,12 +1,20 @@
 import { Request, Response } from 'express';
 import { GoalService } from '../services/GoalService';
+import { getOrCreateHouseholdId, resolveHouseholdId } from '../services/UserService';
 
 const goalService = new GoalService();
 
 export class GoalController {
   async list(req: Request, res: Response) {
     try {
-      const goals = await goalService.listGoals();
+      const user = (req as any).user;
+      const householdId = await resolveHouseholdId(user.id);
+
+      if (!householdId) {
+        return res.status(200).json([]);
+      }
+
+      const goals = await goalService.listGoals(householdId);
       return res.status(200).json(goals);
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao listar metas.' });
@@ -15,13 +23,15 @@ export class GoalController {
 
   async create(req: Request, res: Response) {
     try {
+      const user = (req as any).user;
       const { name, icon, color, targetAmount } = req.body;
 
       if (!name || !icon || !color || !targetAmount) {
         return res.status(400).json({ error: 'Nome, ícone, cor e valor alvo são obrigatórios.' });
       }
 
-      const goal = await goalService.createGoal({ name, icon, color, targetAmount });
+      const householdId = await getOrCreateHouseholdId(user.id);
+      const goal = await goalService.createGoal({ name, icon, color, targetAmount, householdId });
       return res.status(201).json(goal);
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao criar meta.' });
@@ -30,6 +40,7 @@ export class GoalController {
 
   async update(req: Request, res: Response) {
     try {
+      const user = (req as any).user;
       const { id } = req.params as { id: string };
       const { name, icon, color, targetAmount } = req.body;
 
@@ -37,7 +48,8 @@ export class GoalController {
         return res.status(400).json({ error: 'Meta inválida.' });
       }
 
-      const goal = await goalService.updateGoal(id, { name, icon, color, targetAmount });
+      const householdId = await getOrCreateHouseholdId(user.id);
+      const goal = await goalService.updateGoal(id, householdId, { name, icon, color, targetAmount });
       return res.status(200).json(goal);
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao atualizar meta.' });
@@ -46,13 +58,15 @@ export class GoalController {
 
   async delete(req: Request, res: Response) {
     try {
+      const user = (req as any).user;
       const { id } = req.params as { id: string };
 
       if (!id) {
         return res.status(400).json({ error: 'Meta inválida.' });
       }
 
-      await goalService.deleteGoal(id);
+      const householdId = await getOrCreateHouseholdId(user.id);
+      await goalService.deleteGoal(id, householdId);
       return res.status(204).send();
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao excluir meta.' });
@@ -61,6 +75,7 @@ export class GoalController {
 
   async contribute(req: Request, res: Response) {
     try {
+      const user = (req as any).user;
       const { id } = req.params as { id: string };
       const { amount } = req.body;
 
@@ -68,7 +83,8 @@ export class GoalController {
         return res.status(400).json({ error: 'Valor é obrigatório.' });
       }
 
-      const goal = await goalService.contribute(id, Number(amount));
+      const householdId = await getOrCreateHouseholdId(user.id);
+      const goal = await goalService.contribute(id, householdId, Number(amount));
       return res.status(200).json(goal);
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Erro ao movimentar meta.' });

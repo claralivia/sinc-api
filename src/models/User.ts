@@ -7,6 +7,8 @@ export interface IUser extends Document {
   role: 'ADMIN' | 'USER';
   phone?: string;
   avatarUrl?: string;
+  householdId?: mongoose.Types.ObjectId | null;
+  managedUserId?: mongoose.Types.ObjectId | null;
 }
 
 const UserSchema = new Schema(
@@ -17,6 +19,8 @@ const UserSchema = new Schema(
     role: { type: String, enum: ['ADMIN', 'USER'], default: 'USER' },
     phone: { type: String },
     avatarUrl: { type: String },
+    householdId: { type: Schema.Types.ObjectId, ref: 'Household', default: null },
+    managedUserId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true }
 );

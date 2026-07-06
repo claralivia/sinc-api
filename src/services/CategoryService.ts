@@ -1,18 +1,18 @@
 import Category from '../models/Category';
 
 export class CategoryService {
-  async listCategories() {
-    const categories = await Category.find({ deletedAt: null }).sort({ name: 1 });
+  async listCategories(householdId: string) {
+    const categories = await Category.find({ deletedAt: null, householdId }).sort({ name: 1 });
     return categories;
   }
 
-  async createCategory(data: { name: string; type: 'INCOME' | 'EXPENSE'; icon: string; color: string }) {
+  async createCategory(data: { name: string; type: 'INCOME' | 'EXPENSE'; icon: string; color: string; householdId: string }) {
     return await Category.create(data);
   }
 
-  async updateCategory(id: string, data: { name?: string; type?: 'INCOME' | 'EXPENSE'; icon?: string; color?: string }) {
+  async updateCategory(id: string, householdId: string, data: { name?: string; type?: 'INCOME' | 'EXPENSE'; icon?: string; color?: string }) {
     const category = await Category.findOneAndUpdate(
-      { _id: id, deletedAt: null },
+      { _id: id, householdId, deletedAt: null },
       data,
       { new: true, runValidators: true }
     );
@@ -24,9 +24,9 @@ export class CategoryService {
     return category;
   }
 
-  async deleteCategory(id: string) {
+  async deleteCategory(id: string, householdId: string) {
     const category = await Category.findOneAndUpdate(
-      { _id: id, deletedAt: null },
+      { _id: id, householdId, deletedAt: null },
       { deletedAt: new Date() },
       { new: true }
     );

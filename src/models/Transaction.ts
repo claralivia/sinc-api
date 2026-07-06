@@ -18,6 +18,7 @@ export interface ITransaction extends Document {
   installmentGroupId?: string;
   installmentNumber?: number;
   totalInstallments?: number;
+  householdId: mongoose.Types.ObjectId;
   deletedAt?: Date;
 }
 
@@ -40,6 +41,7 @@ const TransactionSchema = new Schema(
     installmentGroupId: { type: String },
     installmentNumber: { type: Number },
     totalInstallments: { type: Number },
+    householdId: { type: Schema.Types.ObjectId, ref: 'Household', required: true },
     deletedAt: { type: Date, default: null },
   },
   {

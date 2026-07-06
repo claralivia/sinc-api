@@ -6,8 +6,8 @@ import { TransactionService } from './TransactionService';
 const transactionService = new TransactionService();
 
 export class RecurringExpenseService {
-  async listRecurringExpenses() {
-    return await RecurringExpense.find({ deletedAt: null, active: true })
+  async listRecurringExpenses(householdId: string) {
+    return await RecurringExpense.find({ deletedAt: null, active: true, householdId })
       .sort({ dueDay: 1 })
       .populate('categoryId', 'name icon color')
       .populate('cardId', 'name color logoUrl')
@@ -24,12 +24,13 @@ export class RecurringExpenseService {
     owedBy?: string;
     customSplitPercentage?: number;
     dueDay: number;
+    householdId: string;
   }>) {
     return await RecurringExpense.create(data as any);
   }
 
-  async updateRecurringExpense(id: string, data: Record<string, unknown>) {
-    const recurringExpense = await RecurringExpense.findOneAndUpdate({ _id: id, deletedAt: null }, data, {
+  async updateRecurringExpense(id: string, householdId: string, data: Record<string, unknown>) {
+    const recurringExpense = await RecurringExpense.findOneAndUpdate({ _id: id, householdId, deletedAt: null }, data, {
       returnDocument: 'after',
       runValidators: true,
     });
@@ -41,9 +42,9 @@ export class RecurringExpenseService {
     return recurringExpense;
   }
 
-  async deleteRecurringExpense(id: string) {
+  async deleteRecurringExpense(id: string, householdId: string) {
     const recurringExpense = await RecurringExpense.findOneAndUpdate(
-      { _id: id, deletedAt: null },
+      { _id: id, householdId, deletedAt: null },
       { deletedAt: new Date() },
       { returnDocument: 'after' }
     );
@@ -55,8 +56,8 @@ export class RecurringExpenseService {
     return recurringExpense;
   }
 
-  async listWithStatus(startDate: string, endDate: string) {
-    const recurringExpenses = await this.listRecurringExpenses();
+  async listWithStatus(startDate: string, endDate: string, householdId: string) {
+    const recurringExpenses = await this.listRecurringExpenses(householdId);
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -64,6 +65,7 @@ export class RecurringExpenseService {
       recurringExpenseId: { $in: recurringExpenses.map((expense) => expense._id) },
       date: { $gte: start, $lte: end },
       deletedAt: null,
+      householdId,
     });
 
     return recurringExpenses.map((expense) => {
@@ -77,8 +79,8 @@ export class RecurringExpenseService {
     });
   }
 
-  async launch(id: string, paidBy: string, date: Date) {
-    const recurringExpense = await RecurringExpense.findOne({ _id: id, deletedAt: null });
+  async launch(id: string, paidBy: string, date: Date, householdId: string) {
+    const recurringExpense = await RecurringExpense.findOne({ _id: id, householdId, deletedAt: null });
 
     if (!recurringExpense) {
       throw new Error('Gasto fixo não encontrado.');
