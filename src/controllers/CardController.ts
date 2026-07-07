@@ -56,6 +56,24 @@ export class CardController {
     }
   }
 
+  async markInvoiceAsPaid(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const { id } = req.params as { id: string };
+      const { month } = req.body as { month: string };
+
+      if (!id || !month) {
+        return res.status(400).json({ error: 'Cartão e mês (YYYY-MM) são obrigatórios.' });
+      }
+
+      const householdId = await getOrCreateHouseholdId(user.id);
+      const result = await cardService.markInvoiceAsPaid(id, householdId, month);
+      return res.status(200).json(result);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'Erro ao marcar fatura como paga.' });
+    }
+  }
+
   async delete(req: Request, res: Response) {
     try {
       const user = (req as any).user;

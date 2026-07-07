@@ -13,8 +13,15 @@ export class TransactionService {
     partnerId?: mongoose.Types.ObjectId,
     customSplitPercentage?: number
   ) {
-    if (splitType === 'MINE' || splitType === 'HERS' || !partnerId) {
+    if (splitType === 'MINE' || !partnerId) {
       return { owedBy: null, owedAmount: 0 };
+    }
+
+    if (splitType === 'HERS') {
+      return {
+        owedBy: partnerId,
+        owedAmount: amount
+      };
     }
 
     if (splitType === 'SHARED_50_50') {
@@ -35,17 +42,37 @@ export class TransactionService {
     return { owedBy: null, owedAmount: 0 };
   }
 
+  /**
+   * Compras no crédito feitas depois do fechamento da fatura só serão pagas
+   * (e devem contar no dashboard) no mês seguinte — por isso `competenceDate`
+   * diverge de `date` só nesse caso.
+   */
+  private computeCompetenceDate(date: Date, paymentMethod: string, closingDay?: number): Date {
+    if (paymentMethod !== 'CREDIT_CARD' || !closingDay) {
+      return date;
+    }
+
+    const competenceDate = new Date(date);
+    if (competenceDate.getDate() > closingDay) {
+      competenceDate.setMonth(competenceDate.getMonth() + 1);
+    }
+
+    return competenceDate;
+  }
+
   async createTransaction(data: Partial<ITransaction> & { partnerId?: mongoose.Types.ObjectId, customSplitPercentage?: number }) {
+    let card = null;
+
     if (data.cardId) {
-      const cardExists = await Card.findById(data.cardId);
-      if (!cardExists) {
+      card = await Card.findById(data.cardId);
+      if (!card) {
         throw new Error('Cartão não encontrado.');
       }
     }
 
-    const isSharedSplit = data.splitType === 'SHARED_50_50' || data.splitType === 'SHARED_CUSTOM';
+    const needsPartner = data.splitType === 'HERS' || data.splitType === 'SHARED_50_50' || data.splitType === 'SHARED_CUSTOM';
 
-    if (isSharedSplit && data.partnerId) {
+    if (needsPartner && data.partnerId) {
       await assertValidPartner(data.paidBy!.toString(), data.partnerId.toString());
     }
 
@@ -59,14 +86,16 @@ export class TransactionService {
 
     const householdId = await getOrCreateHouseholdId(data.paidBy!.toString());
 
-    const baseData = { ...data, owedBy, owedAmount, householdId };
+    const competenceDate = this.computeCompetenceDate(data.date as Date, data.paymentMethod!, card?.closingDay);
+
+    const baseData = { ...data, owedBy, owedAmount, householdId, competenceDate };
 
     const isInstallment = data.paymentMethod === 'CREDIT_CARD' && data.totalInstallments && data.totalInstallments > 1;
 
     if (isInstallment) {
       const totalInstallments = data.totalInstallments!;
       const totalAmount = data.amount!;
-      
+
       const baseInstallmentAmount = Math.floor(totalAmount / totalInstallments);
       const remainder = totalAmount % totalInstallments;
       const groupId = crypto.randomUUID();
@@ -76,15 +105,15 @@ export class TransactionService {
         const installmentDate = new Date(data.date as Date);
         installmentDate.setMonth(installmentDate.getMonth() + (i - 1));
 
-        const amountForThisInstallment = i === 1 
-          ? baseInstallmentAmount + remainder 
+        const amountForThisInstallment = i === 1
+          ? baseInstallmentAmount + remainder
           : baseInstallmentAmount;
 
         const installmentDebt = this.calculateDebt(
-          amountForThisInstallment, 
-          baseData.paidBy!, 
-          baseData.splitType!, 
-          baseData.partnerId, 
+          amountForThisInstallment,
+          baseData.paidBy!,
+          baseData.splitType!,
+          baseData.partnerId,
           baseData.customSplitPercentage
         );
 
@@ -95,6 +124,7 @@ export class TransactionService {
           installmentGroupId: groupId,
           installmentNumber: i,
           date: installmentDate,
+          competenceDate: this.computeCompetenceDate(installmentDate, baseData.paymentMethod!, card?.closingDay),
         });
       }
 
@@ -115,12 +145,22 @@ export class TransactionService {
       throw new Error('Transação não encontrada.');
     }
 
+    const date = data.date ?? transaction.date;
+    const paymentMethod = data.paymentMethod ?? transaction.paymentMethod;
+    const cardId = data.cardId !== undefined ? data.cardId : transaction.cardId;
+
+    let card = null;
+
     if (data.cardId) {
-      const cardExists = await Card.findById(data.cardId);
-      if (!cardExists) {
+      card = await Card.findById(data.cardId);
+      if (!card) {
         throw new Error('Cartão não encontrado.');
       }
+    } else if (cardId && paymentMethod === 'CREDIT_CARD') {
+      card = await Card.findById(cardId);
     }
+
+    const competenceDate = this.computeCompetenceDate(date as Date, paymentMethod, card?.closingDay);
 
     const amount = data.amount ?? transaction.amount;
     const splitType = data.splitType ?? transaction.splitType;
@@ -140,9 +180,9 @@ export class TransactionService {
 
     if (splitInputsChanged) {
       const partnerId = data.partnerId !== undefined ? data.partnerId ?? undefined : transaction.owedBy ?? undefined;
-      const isSharedSplit = splitType === 'SHARED_50_50' || splitType === 'SHARED_CUSTOM';
+      const needsPartner = splitType === 'HERS' || splitType === 'SHARED_50_50' || splitType === 'SHARED_CUSTOM';
 
-      if (isSharedSplit && partnerId) {
+      if (needsPartner && partnerId) {
         await assertValidPartner(transaction.paidBy.toString(), partnerId.toString());
       }
 
@@ -155,10 +195,11 @@ export class TransactionService {
       description: data.description ?? transaction.description,
       amount,
       type: data.type ?? transaction.type,
-      date: data.date ?? transaction.date,
+      date,
+      competenceDate,
       categoryId: data.categoryId ?? transaction.categoryId,
-      paymentMethod: data.paymentMethod ?? transaction.paymentMethod,
-      cardId: data.cardId !== undefined ? data.cardId : transaction.cardId,
+      paymentMethod,
+      cardId,
       splitType,
       customSplitPercentage,
       owedBy,

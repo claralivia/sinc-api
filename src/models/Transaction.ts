@@ -5,6 +5,7 @@ export interface ITransaction extends Document {
   amount: number;
   type: 'INCOME' | 'EXPENSE';
   date: Date;
+  competenceDate: Date;
   paidAt?: Date;
   categoryId: mongoose.Types.ObjectId;
   paidBy: mongoose.Types.ObjectId;
@@ -29,6 +30,9 @@ const TransactionSchema = new Schema(
     amount: { type: Number, required: true },
     type: { type: String, enum: ['INCOME', 'EXPENSE'], required: true },
     date: { type: Date, required: true },
+    // Mês em que a compra deve contar no dashboard: igual a `date`, exceto no
+    // cartão de crédito, onde compras após o fechamento migram pro mês seguinte.
+    competenceDate: { type: Date, required: true },
     paidAt: { type: Date },
     categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
     paidBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

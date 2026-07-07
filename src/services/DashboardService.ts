@@ -4,19 +4,35 @@ import Household from '../models/Household';
 import User from '../models/User';
 import { resolveHouseholdId } from './UserService';
 
+// Compras no cartão só "contam" no mês da fatura (competenceDate); os demais
+// meios de pagamento usam a data real da transação.
+const effectiveDateExpr = {
+  $cond: [{ $eq: ['$paymentMethod', 'CREDIT_CARD'] }, '$competenceDate', '$date'],
+};
+
+// Transações antigas nunca tiveram `paidAt` setado — o campo fica ausente, e
+// o Mongo trata "ausente" como diferente de `null` num $eq de agregação. O
+// $ifNull normaliza os dois casos antes de comparar.
+const isPaidExpr = { $ne: [{ $ifNull: ['$paidAt', null] }, null] };
+
 export class DashboardService {
   async getMonthlySummary(startDate: string, endDate: string, userId: string) {
     const start = new Date(startDate);
     const end = new Date(endDate);
+    // O frontend manda datas puras ("2026-07-31"), que viram meia-noite UTC —
+    // sem isso, transações do último dia (salvas à meia-noite local, ex. 03:00
+    // UTC no Brasil) ficariam de fora por já ser "depois" desse instante.
+    end.setUTCHours(23, 59, 59, 999);
 
     const householdId = await resolveHouseholdId(userId);
 
     if (!householdId) {
       return {
         period: { start, end },
-        totals: { totalIncome: 0, totalExpense: 0, balance: 0 },
+        totals: { totalIncome: 0, totalExpense: 0, balance: 0, paidExpense: 0, pendingExpense: 0 },
         sharedDebt: [],
         expensesByCategory: [],
+        cardInvoices: [],
       };
     }
 
@@ -25,15 +41,17 @@ export class DashboardService {
     // Agregação 1: Total de Receitas, Despesas e Economia do mês
     const totals = await Transaction.aggregate([
       {
-        // 1. Filtra apenas o mês atual, o vínculo (household) do usuário e ignora os deletados
+        // 1. Filtra apenas o mês atual (por competência, no caso de cartão), o vínculo (household) do usuário e ignora os deletados
         $match: {
-          date: { $gte: start, $lte: end },
           deletedAt: null,
-          householdId: householdObjectId
+          householdId: householdObjectId,
+          $expr: { $and: [{ $gte: [effectiveDateExpr, start] }, { $lte: [effectiveDateExpr, end] }] }
         }
       },
       {
-        // 2. Agrupa e soma os valores separando por tipo
+        // 2. Agrupa e soma os valores separando por tipo. PIX/débito/dinheiro
+        // saem do bolso na hora, então sempre contam como "já desembolsado";
+        // só o cartão fica pendente até a fatura ser marcada como paga.
         $group: {
           _id: null,
           totalIncome: {
@@ -41,6 +59,24 @@ export class DashboardService {
           },
           totalExpense: {
             $sum: { $cond: [{ $eq: ['$type', 'EXPENSE'] }, '$amount', 0] }
+          },
+          paidExpense: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ['$type', 'EXPENSE'] }, { $or: [{ $ne: ['$paymentMethod', 'CREDIT_CARD'] }, isPaidExpr] }] },
+                '$amount',
+                0
+              ]
+            }
+          },
+          pendingExpense: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ['$type', 'EXPENSE'] }, { $eq: ['$paymentMethod', 'CREDIT_CARD'] }, { $not: [isPaidExpr] }] },
+                '$amount',
+                0
+              ]
+            }
           }
         }
       },
@@ -50,6 +86,8 @@ export class DashboardService {
           _id: 0,
           totalIncome: 1,
           totalExpense: 1,
+          paidExpense: 1,
+          pendingExpense: 1,
           balance: { $subtract: ['$totalIncome', '$totalExpense'] }
         }
       }
@@ -60,10 +98,10 @@ export class DashboardService {
     const owedAmounts = await Transaction.aggregate([
       {
         $match: {
-          date: { $gte: start, $lte: end },
           deletedAt: null,
           householdId: householdObjectId,
-          owedBy: { $ne: null }
+          owedBy: { $ne: null },
+          $expr: { $and: [{ $gte: [effectiveDateExpr, start] }, { $lte: [effectiveDateExpr, end] }] }
         }
       },
       {
@@ -90,13 +128,17 @@ export class DashboardService {
 
     // O MongoDB retorna um array vazio se não houver dados no mês.
     // Usamos o Optional Chaining e fallback para evitar erros no frontend.
-    const currentTotals = totals[0] || { totalIncome: 0, totalExpense: 0, balance: 0 };
+    const currentTotals = totals[0] || { totalIncome: 0, totalExpense: 0, balance: 0, paidExpense: 0, pendingExpense: 0 };
 
+    // Gastos no cartão de crédito não entram aqui por categoria — eles são
+    // consolidados por fatura em `cardInvoices`, já que só "acontecem" de
+    // fato no bolso quando a fatura fecha.
     const expensesByCategory = await Transaction.aggregate([
       {
         $match: {
           date: { $gte: start, $lte: end },
           type: 'EXPENSE',
+          paymentMethod: { $ne: 'CREDIT_CARD' },
           deletedAt: null,
           householdId: householdObjectId
         }
@@ -126,12 +168,61 @@ export class DashboardService {
       }
     ]);
 
+    // Agregação 4: Fatura do mês por cartão (competência, não data da compra)
+    const cardInvoices = await Transaction.aggregate([
+      {
+        $match: {
+          type: 'EXPENSE',
+          paymentMethod: 'CREDIT_CARD',
+          deletedAt: null,
+          householdId: householdObjectId,
+          competenceDate: { $gte: start, $lte: end }
+        }
+      },
+      {
+        $group: {
+          _id: '$cardId',
+          total: { $sum: '$amount' },
+          unpaidCount: { $sum: { $cond: [{ $not: [isPaidExpr] }, 1, 0] } }
+        }
+      },
+      {
+        $lookup: {
+          from: 'cards',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'cardDetails'
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          cardId: '$_id',
+          cardName: { $arrayElemAt: ['$cardDetails.name', 0] },
+          cardColor: { $arrayElemAt: ['$cardDetails.color', 0] },
+          cardLogoUrl: { $arrayElemAt: ['$cardDetails.logoUrl', 0] },
+          dueDay: { $arrayElemAt: ['$cardDetails.dueDay', 0] },
+          total: 1,
+          paid: { $eq: ['$unpaidCount', 0] }
+        }
+      },
+      { $sort: { total: -1 } }
+    ]);
+
+    // A fatura é sempre marcada como paga por inteiro, então o "mês" da
+    // competência (usado pra chamar o endpoint de pagar) é o próprio período consultado.
+    // `start` vem de um ISO date-only (parseado como UTC) — getters locais aqui
+    // dariam o mês errado num servidor com timezone atrás de UTC.
+    const invoiceMonth = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`;
+    const cardInvoicesWithMonth = cardInvoices.map((invoice) => ({ ...invoice, month: invoiceMonth }));
+
     // Retorno atualizado do dashboard
     return {
       period: { start, end },
       totals: currentTotals,
       sharedDebt,
-      expensesByCategory // Nova chave para o seu gráfico de rosca
+      expensesByCategory, // Nova chave para o seu gráfico de rosca
+      cardInvoices: cardInvoicesWithMonth
     };
   }
 }
