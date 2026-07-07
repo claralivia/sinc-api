@@ -68,6 +68,35 @@ export async function getHouseholdMemberIds(userId: string): Promise<string[]> {
   return (household?.members || []).map((id) => id.toString());
 }
 
+/**
+ * Garante que quem vai "dever" numa divisão de gastos é de fato alguém do
+ * mesmo vínculo (e não a própria pessoa) — evita repetir o bug em que uma
+ * conta fora do household (ex: um ADMIN sem vínculo de casal) acabava
+ * marcada como devedora.
+ */
+export async function assertValidPartner(paidBy: string, partnerId: string): Promise<void> {
+  const effectivePaidBy = await resolveEffectiveUserId(paidBy);
+
+  if (partnerId === effectivePaidBy) {
+    throw new Error('Não é possível dividir um gasto com você mesmo(a).');
+  }
+
+  const memberIds = await getHouseholdMemberIds(paidBy);
+
+  if (!memberIds.includes(partnerId)) {
+    throw new Error('Parceiro(a) inválido para divisão de gastos.');
+  }
+}
+
+export async function assertHouseholdMember(householdId: string, userId: string): Promise<void> {
+  const household = await Household.findById(householdId).select('members');
+  const isMember = (household?.members || []).some((id) => id.toString() === userId);
+
+  if (!isMember) {
+    throw new Error('Usuário selecionado não pertence a esse vínculo.');
+  }
+}
+
 export class UserService {
   async listUsers() {
     return await User.find().sort({ name: 1 });

@@ -11,6 +11,7 @@ export interface ITransaction extends Document {
   owedBy?: mongoose.Types.ObjectId | null;
   owedAmount?: number;
   splitType: 'MINE' | 'HERS' | 'SHARED_50_50' | 'SHARED_CUSTOM';
+  customSplitPercentage?: number;
   paymentMethod: 'PIX' | 'CREDIT_CARD' | 'DEBIT' | 'CASH';
   cardId?: mongoose.Types.ObjectId;
   isRecurring: boolean;
@@ -34,6 +35,7 @@ const TransactionSchema = new Schema(
     owedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     owedAmount: { type: Number, default: 0 },
     splitType: { type: String, enum: ['MINE', 'HERS', 'SHARED_50_50', 'SHARED_CUSTOM'], required: true },
+    customSplitPercentage: { type: Number, default: null },
     paymentMethod: { type: String, enum: ['PIX', 'CREDIT_CARD', 'DEBIT', 'CASH'], required: true },
     cardId: { type: Schema.Types.ObjectId, ref: 'Card' },
     isRecurring: { type: Boolean, default: false },

@@ -57,6 +57,38 @@ export class TransactionController {
     }
   }
 
+  async get(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const { id } = req.params as { id: string };
+
+      const householdId = await resolveHouseholdId(user.id);
+
+      if (!householdId) {
+        return res.status(404).json({ error: 'Transação não encontrada.' });
+      }
+
+      const transaction = await transactionService.getTransaction(id, householdId);
+      return res.status(200).json(transaction);
+    } catch (error: any) {
+      return res.status(404).json({ error: error.message || 'Transação não encontrada.' });
+    }
+  }
+
+  async update(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const { id } = req.params as { id: string };
+
+      const householdId = await getOrCreateHouseholdId(user.id);
+      const transaction = await transactionService.updateTransaction(id, householdId, req.body);
+
+      return res.status(200).json(transaction);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'Erro ao atualizar transação.' });
+    }
+  }
+
   async delete(req: Request, res: Response) {
     try {
       const user = (req as any).user;

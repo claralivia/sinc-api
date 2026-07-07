@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Transaction, { ITransaction } from '../models/Transaction';
 import Card from '../models/Card';
-import { getOrCreateHouseholdId } from './UserService';
+import { assertValidPartner, getOrCreateHouseholdId } from './UserService';
 
 export class TransactionService {
   
@@ -41,6 +41,12 @@ export class TransactionService {
       if (!cardExists) {
         throw new Error('Cartão não encontrado.');
       }
+    }
+
+    const isSharedSplit = data.splitType === 'SHARED_50_50' || data.splitType === 'SHARED_CUSTOM';
+
+    if (isSharedSplit && data.partnerId) {
+      await assertValidPartner(data.paidBy!.toString(), data.partnerId.toString());
     }
 
     const { owedBy, owedAmount } = this.calculateDebt(
@@ -96,6 +102,86 @@ export class TransactionService {
     }
 
     return await Transaction.create(baseData);
+  }
+
+  async updateTransaction(
+    id: string,
+    householdId: string,
+    data: Partial<ITransaction> & { partnerId?: mongoose.Types.ObjectId | null; customSplitPercentage?: number }
+  ) {
+    const transaction = await Transaction.findOne({ _id: id, householdId, deletedAt: null });
+
+    if (!transaction) {
+      throw new Error('Transação não encontrada.');
+    }
+
+    if (data.cardId) {
+      const cardExists = await Card.findById(data.cardId);
+      if (!cardExists) {
+        throw new Error('Cartão não encontrado.');
+      }
+    }
+
+    const amount = data.amount ?? transaction.amount;
+    const splitType = data.splitType ?? transaction.splitType;
+    const customSplitPercentage = data.customSplitPercentage ?? transaction.customSplitPercentage;
+
+    // Só recalcula a divisão se algum campo que a afeta veio na requisição —
+    // caso contrário mantém owedBy/owedAmount como estavam (edições que só
+    // mudam descrição/categoria/etc não devem "resetar" a divisão existente).
+    const splitInputsChanged =
+      data.amount !== undefined ||
+      data.splitType !== undefined ||
+      data.partnerId !== undefined ||
+      data.customSplitPercentage !== undefined;
+
+    let owedBy = transaction.owedBy;
+    let owedAmount = transaction.owedAmount;
+
+    if (splitInputsChanged) {
+      const partnerId = data.partnerId !== undefined ? data.partnerId ?? undefined : transaction.owedBy ?? undefined;
+      const isSharedSplit = splitType === 'SHARED_50_50' || splitType === 'SHARED_CUSTOM';
+
+      if (isSharedSplit && partnerId) {
+        await assertValidPartner(transaction.paidBy.toString(), partnerId.toString());
+      }
+
+      const debt = this.calculateDebt(amount, transaction.paidBy, splitType, partnerId, customSplitPercentage);
+      owedBy = debt.owedBy;
+      owedAmount = debt.owedAmount;
+    }
+
+    transaction.set({
+      description: data.description ?? transaction.description,
+      amount,
+      type: data.type ?? transaction.type,
+      date: data.date ?? transaction.date,
+      categoryId: data.categoryId ?? transaction.categoryId,
+      paymentMethod: data.paymentMethod ?? transaction.paymentMethod,
+      cardId: data.cardId !== undefined ? data.cardId : transaction.cardId,
+      splitType,
+      customSplitPercentage,
+      owedBy,
+      owedAmount,
+    });
+
+    await transaction.save();
+
+    return transaction;
+  }
+
+  async getTransaction(id: string, householdId: string) {
+    const transaction = await Transaction.findOne({ _id: id, householdId, deletedAt: null })
+      .populate('categoryId', 'name icon color')
+      .populate('paidBy', 'name avatarUrl')
+      .populate('owedBy', 'name avatarUrl')
+      .populate('cardId', 'name color');
+
+    if (!transaction) {
+      throw new Error('Transação não encontrada.');
+    }
+
+    return transaction;
   }
 
   async listTransactions(filters: any, page: number = 1, limit: number = 20, householdId?: string) {

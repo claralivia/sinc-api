@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { RecurringExpenseService } from '../services/RecurringExpenseService';
-import { getOrCreateHouseholdId, resolveHouseholdId, resolveOwnerId } from '../services/UserService';
+import { assertHouseholdMember, getOrCreateHouseholdId, resolveHouseholdId, resolveOwnerId } from '../services/UserService';
 
 const recurringExpenseService = new RecurringExpenseService();
 
@@ -38,6 +38,11 @@ export class RecurringExpenseController {
       }
 
       const householdId = await getOrCreateHouseholdId(user.id);
+
+      if (owedBy) {
+        await assertHouseholdMember(householdId, owedBy);
+      }
+
       const recurringExpense = await recurringExpenseService.createRecurringExpense({
         description,
         amount,
@@ -67,6 +72,11 @@ export class RecurringExpenseController {
       }
 
       const householdId = await getOrCreateHouseholdId(user.id);
+
+      if (req.body.owedBy) {
+        await assertHouseholdMember(householdId, req.body.owedBy);
+      }
+
       const recurringExpense = await recurringExpenseService.updateRecurringExpense(id, householdId, req.body);
       return res.status(200).json(recurringExpense);
     } catch (error: any) {
